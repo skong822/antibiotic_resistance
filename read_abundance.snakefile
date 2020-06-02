@@ -13,27 +13,23 @@ PROJECT_DIR = abspath(PROJECT_DIR)
 with open(config["sample_table"]) as inf:
     insamps = [i for i in inf.readlines() if i != '\n']
     sample_dict = {sample: files.split(",") for sample, files in [l.strip().split("\t") for l in insamps]}
+
 # ensure no comment lines
 sample_dict = {k:sample_dict[k] for k in sample_dict.keys() if k[0] != '#'}
 
 # get list of samples
 sample_list = list(sample_dict.keys())
 
+rule all:
+    input:
+     expand(join(PROJECT_DIR, "abundance/{sample}.bam"), sample = sample_list)
+
 rule align_reads:
     input:
-        #from config file, pulls out the value of align reads -> host genome
-        index_amb = config['align_reads']['host_genome'] + '.amb',
-        index_ann = config['align_reads']['host_genome'] + '.ann',
-        index_bwt = config['align_reads']['host_genome'] + '.bwt',
-        index_pac = config['align_reads']['host_genome'] + '.pac',
-        index_sa = config['align_reads']['host_genome'] + '.sa',
-        #figure out how to input this from samples table
-        fwd       = sample_dict[wildcards.sample][0],
-        rev       = sample_dict[wildcards.sample][1],
-        orp       = sample_dict[wildcards.sample][2]
-    #this will actually output mapped
-    output:
-        join(PROJECT_DIR, "abundance/{sample}.bam"),
+        fwd = lambda wildcards: sample_dict[wildcards.sample][0],
+        rev = lambda wildcards: sample_dict[wildcards.sample][1],
+        orp = lambda wildcards: sample_dict[wildcards.sample][2]
+    output: join(PROJECT_DIR, "abundance/{sample}.bam"),
     params:
         bwa_index_base = join(config['align_reads']['host_genome']),
     threads: 4
@@ -42,7 +38,6 @@ rule align_reads:
         mem=32,
         time=24
     #singularity: "shub://bsiranosian/bens_1337_workflows:align"
-    # conda: "envs/align.yaml"
     benchmark: join(PROJECT_DIR, "benchmark/{sample}_time.txt")
     shell: """
         mkdir -p {PROJECT_DIR}/benchmark/
@@ -55,7 +50,60 @@ rule align_reads:
             samtools view -F 4 -b > {output}
     """
 
+rule htseq:
+        input:
+            bam = join(PROJECT_DIR, "abundance/{sample}.bam"),
+            gff = 'canFam3.gff3'
+        output:
+            '{sample}_HTSeq_union_gff3_no_gene_ID.log',
+            '{sample}_HTSeq.csv'
+        threads: 1
+        shell:
+            'htseq-count -m union -s no -t gene -i ID -r pos -f bam {input.bam} {input.gff} &> {output[0]} && '
+            'grep ENS {output[0]} | sed "s/gene://g" > {output[1]}'
 
+# rule align_reads:
+#     input: lambda wildcards: sample_dict[wildcards.sample]
+#     output: join(PROJECT_DIR, "abundance/{sample}.bam"),
+#     params:
+#         bwa_index_base = join(config['align_reads']['host_genome']),
+#         reads_command = lambda wildcards: get_reads_command(sample_dict[wildcards.sample]),
+#         orphan_command = lambda wildcards: get_orphan_command(sample_dict[wildcards.sample])
+#     threads: 4
+#     resources:
+#         mem_mb=32000,
+#         mem=32,
+#         time=24
+#     #singularity: "shub://bsiranosian/bens_1337_workflows:align"
+#     # conda: "envs/align.yaml"
+#     benchmark: join(PROJECT_DIR, "benchmark/{sample}_time.txt")
+#     shell: """
+#         mkdir -p {PROJECT_DIR}/benchmark/
+#         # if an index needs to be built, use bwa index ref.fa
+#         # run on paired reads
+#         bwa mem -t {threads} {params.bwa_index_base} {params.reads_command} | \
+#             samtools view -F 4 -b > {output}
+#         # run on unpaired reads
+#         bwa mem -t {threads} {params.bwa_index_base} {params.orphan_command} | \
+#             samtools view -F 4 -b > {output}
+#     """
+
+
+# rule align_reads:
+#     input:
+#         lambda wildcards: sample_dict[wildcards.sample]
+#     params:
+#
+#     output:
+#         join(PROJECT_DIR, "abundance/{sample}.bam"),
+#     params:
+#     reads_command = lambda wildcards: get_reads_command(sample_dict[wildcards.sample])
+#     bwa_index_base = join(config['align_reads']['host_genome'])
+#     threads: 4
+#     resources:
+#         mem_mb=32000,
+#         mem=32,
+#         time=24
 
     # #sorts read alignments
     # rule samtools_sort:
