@@ -1,0 +1,8 @@
+# specify directories
+sample_table: preprocessing/01_processing/assembly_input.txt
+output_directory: read_abundance
+
+align_reads:
+  host_genome: arg_genome.fa
+
+

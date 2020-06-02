@@ -33,34 +33,29 @@ rule align_reads:
         orp       = sample_dict[wildcards.sample][2]
     #this will actually output mapped
     output:
-        unmapped_1 = join(PROJECT_DIR, "01_processing/05_sync/{sample}_1.fq.gz"),
-        unmapped_2 = join(PROJECT_DIR, "01_processing/05_sync/{sample}_2.fq.gz"),
-        unmapped_singletons = join(PROJECT_DIR, "01_processing/05_sync/{sample}_orphans.fq.gz"),
+        join(PROJECT_DIR, "abundance/{sample}.bam"),
     params:
         bwa_index_base = join(config['align_reads']['host_genome']),
-        singelton_temp_1 = join(PROJECT_DIR, "01_processing/04_host_align/{sample}_rmHost_singletons1.fq.gz"),
-        singelton_temp_2 = join(PROJECT_DIR, "01_processing/04_host_align/{sample}_rmHost_singletons2.fq.gz"),
     threads: 4
     resources:
         mem_mb=32000,
         mem=32,
         time=24
-    singularity: "shub://bsiranosian/bens_1337_workflows:align"
+    #singularity: "shub://bsiranosian/bens_1337_workflows:align"
     # conda: "envs/align.yaml"
-    benchmark: join(PROJECT_DIR, "01_processing/04_host_align/{sample}_time.txt")
+    benchmark: join(PROJECT_DIR, "benchmark/{sample}_time.txt")
     shell: """
-        mkdir -p {PROJECT_DIR}/01_processing/04_host_align/
+        mkdir -p {PROJECT_DIR}/benchmark/
         # if an index needs to be built, use bwa index ref.fa
         # run on paired reads
         bwa mem -t {threads} {params.bwa_index_base} {input.fwd} {input.rev} | \
-            samtools view -F 4 -b > {output.unmapped_1} -2 {output.unmapped_2} -s {params.singelton_temp_1} -
+            samtools view -F 4 -b > {output}
         # run on unpaired reads
         bwa mem -t {threads} {params.bwa_index_base} {input.orp} | \
-            samtools fastq -@ {threads} -t -T BX -f 4 - > {params.singelton_temp_2}
-        # combine singletons
-        zcat -f {params.singelton_temp_1} {params.singelton_temp_2} | pigz -p {threads} > {output.unmapped_singletons}
-        rm {params.singelton_temp_1} {params.singelton_temp_2}
+            samtools view -F 4 -b > {output}
     """
+
+
 
     # #sorts read alignments
     # rule samtools_sort:
