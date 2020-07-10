@@ -1,6 +1,6 @@
 # specify directories
 sample_table: /labs/asbhatt/skong822/pedsleukemia/preprocessing/01_processing/assembly_input_edited.txt
-output_directory: read_abundance
+output_directory: arg_abundance
 
 align_reads:
   host_genome: arg_genome.fa

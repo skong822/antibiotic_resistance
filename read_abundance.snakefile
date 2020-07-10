@@ -18,24 +18,26 @@ with open(config["sample_table"]) as inf:
 sample_dict = {k:sample_dict[k] for k in sample_dict.keys() if k[0] != '#'}
 
 # get list of samples
-sample_list = list(sample_dict.keys())
+SAMPLES = list(sample_dict.keys())
 
 rule all:
     input:
-     expand(join(PROJECT_DIR, "abundance/{sample}.bam"), sample = sample_list)
+        expand(join(PROJECT_DIR,"sorted_reads/{data}.bam.bai"),data = SAMPLES),
+        expand(join(PROJECT_DIR,"sorted_reads/{data}.bam.idxstats"), data = SAMPLES)
 
 rule align_reads:
     input:
         fwd = lambda wildcards: sample_dict[wildcards.sample][0],
         rev = lambda wildcards: sample_dict[wildcards.sample][1],
         orp = lambda wildcards: sample_dict[wildcards.sample][2]
-    output: join(PROJECT_DIR, "abundance/{sample}.bam"),
+    output: join(PROJECT_DIR, "aligned/{sample}.bam")
     params:
-        bwa_index_base = join(config['align_reads']['host_genome']),
+        bwa_index_base = join(config['align_reads']['host_genome'])
     threads: 4
     resources:
         mem_mb=32000,
         mem=32,
+        #mem_mb, mem redundant
         time=24
     #singularity: "shub://bsiranosian/bens_1337_workflows:align"
     benchmark: join(PROJECT_DIR, "benchmark/{sample}_time.txt")
@@ -49,18 +51,60 @@ rule align_reads:
         bwa mem -t {threads} {params.bwa_index_base} {input.orp} | \
             samtools view -F 4 -b > {output}
     """
+rule samtools_sort:
+    input:
+        join(PROJECT_DIR, "aligned/{sample}.bam")
+    output:
+        join(PROJECT_DIR,"sorted_reads/{sample}.bam")
+    threads: 4
+    resources:
+        mem_mb=32000,
+        mem=32,
+        time=24
+        #attempt parameter for failing (lambda function)
+    shell:
+        "samtools sort -T sorted_reads/{wildcards.sample} "
+        #only use for multi-threaded (ex: -@ for multithreaded)
+        "-O bam {input} > {output}"
 
-rule htseq:
-        input:
-            bam = join(PROJECT_DIR, "abundance/{sample}.bam"),
-            gff = 'canFam3.gff3'
-        output:
-            '{sample}_HTSeq_union_gff3_no_gene_ID.log',
-            '{sample}_HTSeq.csv'
-        threads: 1
-        shell:
-            'htseq-count -m union -s no -t gene -i ID -r pos -f bam {input.bam} {input.gff} &> {output[0]} && '
-            'grep ENS {output[0]} | sed "s/gene://g" > {output[1]}'
+rule samtools_index:
+    input:
+        join(PROJECT_DIR, "sorted_reads/{sample}.bam")
+    output:
+        join(PROJECT_DIR,"sorted_reads/{sample}.bam.bai")
+    threads: 4
+    resources:
+        mem_mb=32000,
+        mem=32,
+        time=24
+    shell:
+        "samtools index {input}"
+
+rule samtools_idxstats:
+    input:
+        join(PROJECT_DIR, "sorted_reads/{sample}.bam")
+    output:
+        join(PROJECT_DIR,"sorted_reads/{sample}.bam.idxstats")
+    threads: 4
+    resources:
+        mem_mb=32000,
+        mem=32,
+        time=24
+    shell:
+        "samtools idxstats {input} > {output}"
+
+rule samtools_faidx:
+    input:
+        "/labs/asbhatt/skong822/pedsleukemia/assembly/02_assembly/01_megahit/{sample}/{sample}.contigs.fa"
+    output:
+        "/labs/asbhatt/skong822/pedsleukemia/assembly/02_assembly/01_megahit/{sample}/{sample}.contigs.fa.fai"
+    threads: 4
+    resources:
+        mem_mb=32000,
+        mem=32,
+        time=24
+    shell:
+        "samtools faidx {input} > {output}"
 
 # rule align_reads:
 #     input: lambda wildcards: sample_dict[wildcards.sample]
